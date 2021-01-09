@@ -40,10 +40,10 @@ object TrollAccounts {
         .option("multiLine", "true")
         .load(ACCOUNTS_FILE)
       accounts.printSchema()
-      println(accounts.count())
 
       val accountCount = accounts.count()
       println(s"Troll Account Count: $accountCount")
+      println(s"Account Creation Date, Account Count: $accountCount")
 
       // Troll Account Creation Times
       val accountCreationDates = accounts.select("account_creation_date").rdd.map(r => r.getString(0))
