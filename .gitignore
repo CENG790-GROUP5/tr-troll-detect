@@ -3,5 +3,6 @@ out
 .idea
 *.iml
 
+.metals/
 data/fake
 data/original
