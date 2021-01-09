@@ -4,5 +4,6 @@ out
 *.iml
 
 .metals/
+checkpoint
 data/fake
-data/original
+data/stream
