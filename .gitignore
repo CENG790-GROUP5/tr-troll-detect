@@ -1,7 +1,7 @@
-*/target
-*/out
-*/.idea
-*/*.iml
+target
+out
+.idea
+*.iml
 
-project/data/fake
-project/data/original
+data/fake
+data/original
