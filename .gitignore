@@ -8,3 +8,7 @@ checkpoint
 data/fake
 data/stream
 output/
+output_archive/
+output_troll/
+output_archive_/
+output_troll_/

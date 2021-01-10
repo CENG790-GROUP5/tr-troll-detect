@@ -3,6 +3,7 @@
 from argparse import ArgumentParser
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
+import pyspark.sql.functions as F
 from glob import glob
 import os
 
@@ -30,15 +31,17 @@ def main():
 
             inputPath = os.path.join(dayHourPath, "*.json.bz2")
             outPath = os.path.join(args.out_path, f"{day}_{hour}")
-            archived_tweets = spark.read.json(inputPath, encoding="utf-8")
-            out_tweets = archived_tweets.filter((archived_tweets.lang == "tr") &
-                                                archived_tweets.user.verified &
-                                                archived_tweets.retweeted_status.isNull())
-            out_tweets.select("text", "extended_tweet.full_text").write.csv(outPath, header=True, encoding="utf-8")
+            archived_tweets = spark.read.json(inputPath)
+            out_tweets = archived_tweets\
+                .filter((archived_tweets.lang == "tr")
+                        & archived_tweets.user.verified
+                        & archived_tweets.retweeted_status.isNull())
+
+            out_tweets.withColumn("tweet_text", F.when(F.col("extended_tweet.full_text").isNull(), F.col("text"))
+                                                 .otherwise(F.col("extended_tweet.full_text")))\
+                .select("tweet_text").write.mode('overwrite').csv(outPath, header=True)
 
             print(f"Finished {day} - {hour}")
-            break
-        break
 
 
 if __name__ == "__main__":
