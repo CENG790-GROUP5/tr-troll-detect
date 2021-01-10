@@ -6,8 +6,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SQLContext, SparkSession}
 
 object ArchivedTweets {
-  val TWEETS_FOLDER: String = "data/stream/02/21/*.json.bz2"
-  val TWEETS_ROOT_FOLDER: String = "data/stream"
+  val TWEETS_FOLDER_FORMAT: String = "data/stream/%s/%s/*.json.bz2"
+  val OUTPUT_FOLDER_PATH: String = "output_archive/%s_%s"
 
   def main(args: Array[String]): Unit = {
     Logger.getLogger("org").setLevel(Level.OFF)
@@ -24,19 +24,27 @@ object ArchivedTweets {
       sc = spark.sparkContext
       sc.setCheckpointDir("checkpoint")
 
-      val archivedTweets = spark.read.json(TWEETS_FOLDER)
+      for (day <- List("02", "06", "08", "10", "13", "17", "18", "23", "25", "28");
+           hour <- List("00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23")) {  // TODO
+        println(s"Starting Day: $day, Hour: $hour")
+        val archivedTweets = spark.read.json(TWEETS_FOLDER_FORMAT.format(day, hour))
 
-//      archivedTweets.printSchema()
-//      println(s"Archived Tweets Count: ${archivedTweets.count()}")
+        //archivedTweets.printSchema()
+        //println(s"Archived Tweets Count: ${archivedTweets.count()}")
 
-      val tweetsRDD = archivedTweets.select("text", "lang", "retweeted_status")
-        .filter(r => r.get(0) != null && r.get(1) != null && r.get(2) == null)
-        .rdd.map(r => (r.getString(0), r.getString(1)))
-        .filter(r => r._2 == "tr")
-        .map(r => (r._1.trim.replaceAll(NEWLINE, " ")))
+        val tweetsRDD = archivedTweets
+          .select("text", "user.followers_count", "user.friends_count", "user.verified", "lang", "extended_tweet.full_text", "retweeted_status")
+          .filter(r => r.get(0) != null && r.get(1) != null && r.get(2) != null && r.get(3) != null && r.get(4) != null && r.get(6) == null)
+          .rdd.map(r => (if (r.get(5) == null) r.getString(0) else r.getString(5), r.getLong(1), r.getLong(2), r.getBoolean(3), r.getString(4)))
+          .filter(r => r._5 == "tr")
+          .map(r => (r._1.trim.replaceAll(NEWLINE, " "), r._2, r._3, r._4))
 
-//      tweetsRDD.take(25).foreach(println)
-//      println(s"Filtered Archived Tweets Count: ${tweetsRDD.count()}")
+        //tweetsRDD.take(5).foreach(println)
+        //println(s"Filtered Archived Tweets Count: ${tweetsRDD.count()}")
+        tweetsRDD.map(r => r._1 + "," + r._2 + "," + r._2 + "," + r._4)
+          .saveAsTextFile(OUTPUT_FOLDER_PATH.format(day, hour))
+        println(s"Finished Day: $day, Hour: $hour")
+      }
 
     } catch {
       case e: Exception => throw e

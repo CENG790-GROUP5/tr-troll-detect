@@ -2,13 +2,13 @@ package edu.metu.ceng790.project
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
-
 import org.apache.log4j.Logger
 import org.apache.log4j.Level
 
 object TrollTweets {
   val TWEETS_FOLDER: String = "data/fake/tweets/*.csv"
   val TWEETS_FILE: String = "data/fake/tweets/tweets_2020_01.csv"
+  val OUTPUT_FOLDER_PATH: String = "output_troll"
 
   val REG = raw"[^A-Za-z0-9\s]+"
   val NEWLINE = raw"[\n\r\t]+"
@@ -32,10 +32,12 @@ object TrollTweets {
         .option("header", "true")
         .option("escape", "\"")
         .option("multiLine", "true")
+        .option("encoding", "UTF-8")
         .csv(TWEETS_FILE)
-      tweets.printSchema()
 
-      println(s"Troll Tweets Count: ${tweets.count()}")
+      //tweets.printSchema()
+
+      //println(s"Troll Tweets Count: ${tweets.count()}")
 
       val tweetsRDD = tweets.select("tweet_text", "tweet_language", "is_retweet")
         .rdd.map(r => (r.getString(0), r.getString(1), r.getString(2)))
@@ -43,9 +45,8 @@ object TrollTweets {
         .filter(r => r._3 == "false")
         .map(r => r._1.trim.replaceAll(NEWLINE, " "))
 
-      tweetsRDD.take(10).foreach(println)
-      println(s"Filtered Troll Tweets Count: ${tweetsRDD.count()}")
-
+      //tweetsRDD.foreach(println)
+      tweetsRDD.saveAsTextFile(OUTPUT_FOLDER_PATH)
     } catch {
       case e: Exception => throw e
     } finally {
