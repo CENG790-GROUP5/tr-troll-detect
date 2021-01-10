@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+
 from transformers import AutoModel, AutoTokenizer
 from pyspark import SparkContext, RDD
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession, DataFrame
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.tuning import ParamGridBuilder, TrainValidationSplit
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
@@ -35,41 +36,59 @@ def parse_args():
                         " 0 for unlimited")
     return parser.parse_args()
 
-def truncate_tweets(tweets: RDD, limit: int) -> RDD:
+def load_tweets(tweet_file: str, spark: SparkSession, limit: int) -> DataFrame:
+    tweets = spark.read.csv(tweet_file, header=True, multiLine=True)
     if not limit:
         return tweets
 
-    return tweets.zipWithIndex().filter(
-        lambda ti: ti[1] < limit
-    ).map(
-        lambda ti : ti[0]
-    )
+    return tweets.limit(limit)
 
 
 def main():
     args = parse_args()
     sc = SparkContext(master="local[*]", appName="tr-troll-detect")
     spark = SparkSession(sc)
-    troll_tweets = truncate_tweets(sc.textFile(args.troll_file), args.limit)
-    nontroll_tweets = truncate_tweets(sc.textFile(args.non_troll_file),
-                                      args.limit)
+    troll_tweets = load_tweets(args.troll_file, spark, args.limit)
+    non_troll_tweets = spark.read.csv(args.non_troll_file, header=True,
+                                      multiLine=True, recursiveFileLookup=True)
+
+    troll_count = troll_tweets.count()
+    non_troll_count = non_troll_tweets.count()
+    print(f"Troll count: {troll_count}, Non-troll count: {non_troll_count}")
+
+    if troll_count < non_troll_count:
+        min_count = troll_count
+    else:
+        min_count = non_troll_count
+    print(f"Truncating to {min_count} samples")
+
+    troll_tweets = troll_tweets.limit(min_count)
+    non_troll_tweets = non_troll_tweets.limit(min_count)
     print(f"SPARK VERSION: {spark.version}")
 
     bert_name = "dbmdz/distilbert-base-turkish-cased"
     tokenizer = AutoTokenizer.from_pretrained(bert_name)
     bert_model = AutoModel.from_pretrained(bert_name)
 
-    troll_tweets = troll_tweets.map(
-        lambda t: (t, forward_bert(t, tokenizer, bert_model), 1)
+    troll_tweets = troll_tweets.rdd.map(
+        lambda t: (t.tweet_text,
+                   forward_bert(t.tweet_text, tokenizer, bert_model),
+                   1)
+    )
+    non_troll_tweets = non_troll_tweets.rdd.map(
+        lambda t: (t.tweet_text,
+                   forward_bert(t.tweet_text, tokenizer, bert_model),
+                   0)
     )
 
-    nontroll_tweets = nontroll_tweets.map(
-        lambda t: (t, forward_bert(t, tokenizer, bert_model), 0)
-    )
-
-    tweets = spark.createDataFrame(troll_tweets.union(nontroll_tweets),
+    tweets = spark.createDataFrame(troll_tweets.union(non_troll_tweets),
                                    schema=["tweet", "features", "label"])
-    train_tweets, test_tweets = tweets.randomSplit([0.75, 0.25])
+
+    train_tweets, test_tweets = tweets.randomSplit([0.75, 0.25], seed=42)
+    train_ver_count = train_tweets.where(train_tweets.label == 0).count()
+    test_ver_count = test_tweets.where(test_tweets.label == 0).count()
+    print(f"Verified count in train split: {train_ver_count}")
+    print(f"Verified count in test split: {test_ver_count}")
     # rf = RandomForestClassifier(seed=42)
     lr = LogisticRegression()
     pipeline = Pipeline(stages=[lr])
