@@ -58,7 +58,7 @@
                 <jvmArgs>
                     <jvmArg>-Xss4m</jvmArg>
                     <jvmArg>-Xms512m</jvmArg>
-                    <jvmArg>-Xmx4096m</jvmArg>
+                    <jvmArg>-Xmx8192m</jvmArg>
                 </jvmArgs>
             </configuration>
             <executions>
